@@ -44,6 +44,7 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: project/src-tauri
+          cache-on-failure: true
       - uses: ilammy/msvc-dev-cmd@v1
       - name: 安装前端依赖
         run: npm ci
