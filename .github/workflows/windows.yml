@@ -1,0 +1,93 @@
+name: windows-offline
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Encrypted source release tag
+        required: true
+        default: source-0.1.2
+jobs:
+  windows:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download encrypted source
+        working-directory: .
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: gh release download $env:SOURCE_TAG --repo gongfpp/config-reviewer-builds --pattern source.enc --dir .
+      - name: Verify and decrypt source
+        working-directory: .
+        shell: pwsh
+        env:
+          SOURCE_ARCHIVE_KEY: ${{ secrets.SOURCE_ARCHIVE_KEY }}
+          SOURCE_ARCHIVE_SHA256: ${{ secrets.SOURCE_ARCHIVE_SHA256 }}
+        run: |
+          python -m pip install --quiet cryptography
+          python decrypt-source.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: project/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: project/src-tauri
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: 安装前端依赖
+        run: npm ci
+      - name: 前端检查与构建
+        run: npm run build
+      - name: Rust 回归测试（含 Windows 凭据库）
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: 构建离线安装包（内置 WebView2）
+        run: npm run tauri build -- --target x86_64-pc-windows-msvc
+      - name: 检查主程序没有动态 VC++ 运行库依赖
+        shell: pwsh
+        run: |
+          $deps = & dumpbin /dependents src-tauri/target/x86_64-pc-windows-msvc/release/config-reviewer.exe
+          $deps | Write-Output
+          if ($deps -match 'VCRUNTIME\d*\.dll|MSVCP\d*\.dll') { throw 'Unexpected dynamic Visual C++ runtime dependency' }
+      - name: 打包完整内网交付物
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/target/release/bundle/nsis | Out-Null
+          Copy-Item src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe src-tauri/target/release/bundle/nsis/
+          ./scripts/package-windows.ps1
+      - name: 离线安装器冒烟检查
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem artifacts/windows-offline/*-setup.exe
+          $destination = Join-Path $env:RUNNER_TEMP 'ConfigReviewer-install'
+          $process = Start-Process $setup.FullName -ArgumentList @('/S', "/D=$destination") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          if (-not (Test-Path (Join-Path $destination 'config-reviewer.exe'))) { throw 'Installed executable not found' }
+      - name: 已安装应用的真实 WebView2 UI 检查
+        shell: pwsh
+        run: |
+          $executable = Join-Path $env:RUNNER_TEMP 'ConfigReviewer-install/config-reviewer.exe'
+          node scripts/windows-ui-smoke.mjs $executable
+      - name: 上传 UI 检查证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-evidence
+          path: project/artifacts/ui-smoke
+          if-no-files-found: ignore
+      - name: 上传离线交付物
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-reviewer-windows-offline
+          path: project/artifacts/ConfigReviewer-*-windows-x64-offline.zip
+          if-no-files-found: error
