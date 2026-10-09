@@ -8,7 +8,7 @@ paths=[p for p in (root/'.offline').rglob('*') if p.is_file()]
 paths += [root/'.cargo/config.toml',root/'DEPENDENCY-INFO.json']
 archive=out/f'ConfigReviewer-{version}-windows-x64-dependencies.zip'
 hashes=[]
-with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
+with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6,strict_timestamps=False) as z:
  for p in sorted(paths):
   name=p.relative_to(root).as_posix();digest=hashlib.file_digest(p.open('rb'),'sha256').hexdigest();hashes.append(f'{digest}  {name}');z.write(p,name)
  z.writestr('DEPENDENCY-SHA256SUMS.txt','\n'.join(hashes)+'\n')
