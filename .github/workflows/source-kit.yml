@@ -30,7 +30,6 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
-      - uses: ilammy/msvc-dev-cmd@v1
       - name: Prepare Windows npm cache and Cargo vendor
         shell: pwsh
         working-directory: project
