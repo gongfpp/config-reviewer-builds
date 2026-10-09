@@ -1,0 +1,95 @@
+name: windows-source-dependencies
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Encrypted source release tag
+        required: true
+jobs:
+  source-kit:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download and verify encrypted source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          SOURCE_ARCHIVE_KEY: ${{ secrets.SOURCE_ARCHIVE_KEY }}
+          SOURCE_ARCHIVE_SHA256: ${{ secrets.SOURCE_ARCHIVE_SHA256 }}
+        run: |
+          gh release download $env:SOURCE_TAG --repo gongfpp/config-reviewer-builds --pattern source.enc --dir .
+          python -m pip install --quiet cryptography
+          python decrypt-source.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Prepare Windows npm cache and Cargo vendor
+        shell: pwsh
+        working-directory: project
+        run: |
+          npm ci --cache .offline/npm-cache --no-audit --fund=false
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prime app npm cache' }
+          npm install --prefix scripts --cache .offline/npm-cache --ignore-scripts --no-audit --fund=false
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prime QA npm cache' }
+          cargo vendor --locked --versioned-dirs --manifest-path src-tauri/Cargo.toml .offline/cargo-vendor | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot vendor Cargo packages' }
+          Add-Content .cargo/config.toml @'
+          
+          [source.crates-io]
+          replace-with = "vendored-sources"
+          [source.vendored-sources]
+          directory = ".offline/cargo-vendor"
+          '@
+      - name: Move source to fresh location and remove installed dependencies
+        shell: pwsh
+        run: |
+          Move-Item project offline-project
+          foreach ($path in @('offline-project/node_modules','offline-project/scripts/node_modules','offline-project/src-tauri/target','offline-project/.offline/npm-cache/_logs')) {
+            if (Test-Path $path) { Remove-Item -Recurse -Force $path }
+          }
+          New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP 'empty-cargo-home') | Out-Null
+      - name: Compile and test with empty Cargo cache and offline npm
+        shell: pwsh
+        working-directory: offline-project
+        env:
+          CARGO_NET_OFFLINE: 'true'
+          npm_config_offline: 'true'
+        run: |
+          $env:RUSTUP_HOME = Join-Path $env:USERPROFILE '.rustup'
+          $env:CARGO_HOME = Join-Path $env:RUNNER_TEMP 'empty-cargo-home'
+          ./scripts/build-and-run.ps1 -Test
+      - name: Run compiled EXE directly in real WebView2
+        shell: pwsh
+        working-directory: offline-project
+        env:
+          npm_config_offline: 'true'
+        run: |
+          npm install --prefix scripts --offline --cache .offline/npm-cache --ignore-scripts --no-audit --fund=false
+          if ($LASTEXITCODE -ne 0) { throw 'Offline QA cache incomplete' }
+          node scripts/windows-ui-smoke.mjs src-tauri/target/x86_64-pc-windows-msvc/debug/config-reviewer.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone EXE UI test failed' }
+      - name: Package dependency-only archive
+        shell: pwsh
+        working-directory: offline-project
+        run: |
+          if (Test-Path .offline/npm-cache/_logs) { Remove-Item -Recurse -Force .offline/npm-cache/_logs }
+          python ../package-dependencies.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-kit-ui-evidence
+          path: offline-project/artifacts/ui-smoke
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-offline-dependencies
+          path: offline-project/artifacts/ConfigReviewer-*-windows-x64-dependencies.zip
+          if-no-files-found: error
