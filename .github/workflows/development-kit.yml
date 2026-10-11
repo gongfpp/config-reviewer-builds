@@ -75,7 +75,9 @@ jobs:
       - name: Install tools, edit source, compile twice and test UI with development tool external traffic blocked
         shell: powershell
         run: |
-          & 'C:/ReviewerKit/scripts/test-offline-development.ps1'
+          $monitor = Start-Process (Get-Command node.exe).Source -ArgumentList (Join-Path $PWD 'monitor-acceptance.mjs') -NoNewWindow -PassThru
+          try { & 'C:/ReviewerKit/scripts/test-offline-development.ps1' }
+          finally { Stop-Process -Id $monitor.Id -Force -ErrorAction SilentlyContinue }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
