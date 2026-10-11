@@ -1,0 +1,30 @@
+name: prepare-offline-development-tools
+on:
+  workflow_dispatch:
+jobs:
+  prepare:
+    runs-on: windows-2022
+    timeout-minutes: 100
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official packages and create verified VS layout
+        shell: pwsh
+        run: ./prepare-dev-tools.ps1
+      - name: Package third-party tools only
+        shell: pwsh
+        run: python package-dev-tools.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: development-tool-preparation-logs
+          path: preparation-logs
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-offline-development-tools
+          path: ConfigReviewer-windows-x64-tools.zip
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
