@@ -37,9 +37,13 @@ try {
   foreach ($profile in $profiles) { Set-NetFirewallProfile -Profile $profile.Name -Enabled $profile.Enabled -DefaultOutboundAction $profile.DefaultOutboundAction }
   foreach ($n in $allow) { Enable-NetFirewallRule -Name $n | Out-Null }
   Probe 'unblocked'
+  New-Item -Path 'HKLM:/SOFTWARE/Policies/Microsoft/Edge/WebView2/AdditionalBrowserArguments' -Force | Out-Null
+  New-ItemProperty -Path 'HKLM:/SOFTWARE/Policies/Microsoft/Edge/WebView2/AdditionalBrowserArguments' -Name config-reviewer.exe -Value '--remote-debugging-port=9222' -PropertyType String -Force | Out-Null
+  Probe 'trusted-machine-policy'
 } finally {
   foreach ($p in $profiles) { Set-NetFirewallProfile -Profile $p.Name -Enabled $p.Enabled -DefaultOutboundAction $p.DefaultOutboundAction }
   foreach ($n in $allow) { Enable-NetFirewallRule -Name $n | Out-Null }
   Get-NetFirewallRule -Name 'RuntimeAgent-*','RuntimeLoopback*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+  Remove-ItemProperty -Path 'HKLM:/SOFTWARE/Policies/Microsoft/Edge/WebView2/AdditionalBrowserArguments' -Name config-reviewer.exe -ErrorAction SilentlyContinue
   Stop-Transcript
 }
