@@ -1,0 +1,50 @@
+name: offline-development-kit-acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Encrypted private source release tag
+        required: true
+      tools_run:
+        description: Verified third-party tool preparation run ID
+        required: true
+jobs:
+  acceptance:
+    runs-on: windows-2022
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download encrypted source, tools, and cached dependencies
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          TOOLS_RUN: ${{ inputs.tools_run }}
+          SOURCE_ARCHIVE_KEY: ${{ secrets.SOURCE_ARCHIVE_KEY }}
+          SOURCE_ARCHIVE_SHA256: ${{ secrets.SOURCE_ARCHIVE_SHA256 }}
+        run: |
+          gh release download $env:SOURCE_TAG --repo gongfpp/config-reviewer-builds --pattern source.enc --dir .
+          python -m pip install --quiet cryptography
+          python decrypt-source.py
+          gh run download $env:TOOLS_RUN --repo gongfpp/config-reviewer-builds -n windows-offline-development-tools -D downloaded-tools
+          if ($LASTEXITCODE -ne 0) { throw 'Tool download failed' }
+          gh run download 37935184347 --repo gongfpp/config-reviewer-builds -n windows-offline-dependencies -D downloaded-deps
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency download failed' }
+          python prepare-acceptance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare isolated kit' }
+      - name: Install tools, edit source, compile twice and test UI with all external traffic blocked
+        shell: powershell
+        run: |
+          & 'C:/ReviewerKit/scripts/test-offline-development.ps1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-development-kit-acceptance-evidence
+          path: |
+            C:/ReviewerKit/artifacts/dev-kit-test
+            C:/ReviewerKit/artifacts/ui-smoke
+            C:/ReviewerKit/.offline/install-logs
+          if-no-files-found: ignore
