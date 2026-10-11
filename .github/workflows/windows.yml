@@ -6,6 +6,12 @@ on:
         description: Encrypted source release tag
         required: true
         default: source-0.1.2
+      source_key_secret:
+        description: Optional isolated source key secret name
+        required: false
+      source_hash_secret:
+        description: Optional isolated source checksum secret name
+        required: false
 jobs:
   windows:
     runs-on: windows-2022
@@ -30,8 +36,8 @@ jobs:
         working-directory: .
         shell: pwsh
         env:
-          SOURCE_ARCHIVE_KEY: ${{ secrets.SOURCE_ARCHIVE_KEY }}
-          SOURCE_ARCHIVE_SHA256: ${{ secrets.SOURCE_ARCHIVE_SHA256 }}
+          SOURCE_ARCHIVE_KEY: ${{ secrets[inputs.source_key_secret || 'SOURCE_ARCHIVE_KEY'] }}
+          SOURCE_ARCHIVE_SHA256: ${{ secrets[inputs.source_hash_secret || 'SOURCE_ARCHIVE_SHA256'] }}
         run: |
           python -m pip install --quiet cryptography
           python decrypt-source.py
