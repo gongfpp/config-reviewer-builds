@@ -5,6 +5,12 @@ on:
       source_tag:
         description: Encrypted private source release tag
         required: true
+      source_key_secret:
+        description: Optional isolated source key secret name
+        required: false
+      source_hash_secret:
+        description: Optional isolated source checksum secret name
+        required: false
       tools_run:
         description: Verified third-party tool preparation run ID
         required: true
@@ -27,8 +33,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_TAG: ${{ inputs.source_tag }}
           TOOLS_RUN: ${{ inputs.tools_run }}
-          SOURCE_ARCHIVE_KEY: ${{ secrets.SOURCE_ARCHIVE_KEY }}
-          SOURCE_ARCHIVE_SHA256: ${{ secrets.SOURCE_ARCHIVE_SHA256 }}
+          SOURCE_ARCHIVE_KEY: ${{ secrets[inputs.source_key_secret || 'SOURCE_ARCHIVE_KEY'] }}
+          SOURCE_ARCHIVE_SHA256: ${{ secrets[inputs.source_hash_secret || 'SOURCE_ARCHIVE_SHA256'] }}
         run: |
           gh release download $env:SOURCE_TAG --repo gongfpp/config-reviewer-builds --pattern source.enc --dir .
           python -m pip install --quiet cryptography
