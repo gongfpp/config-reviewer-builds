@@ -14,6 +14,10 @@ on:
       tools_run:
         description: Verified third-party tool preparation run ID
         required: true
+      dependencies_run:
+        description: Windows cached dependency preparation run ID
+        required: true
+        default: "37935184347"
       clean_fixture:
         description: Reset all preinstalled compiler and shared SDK caches on the disposable runner
         type: boolean
@@ -33,6 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_TAG: ${{ inputs.source_tag }}
           TOOLS_RUN: ${{ inputs.tools_run }}
+          DEPENDENCIES_RUN: ${{ inputs.dependencies_run }}
           SOURCE_ARCHIVE_KEY: ${{ secrets[inputs.source_key_secret || 'SOURCE_ARCHIVE_KEY'] }}
           SOURCE_ARCHIVE_SHA256: ${{ secrets[inputs.source_hash_secret || 'SOURCE_ARCHIVE_SHA256'] }}
         run: |
@@ -41,7 +46,7 @@ jobs:
           python decrypt-source.py
           gh run download $env:TOOLS_RUN --repo gongfpp/config-reviewer-builds -n windows-offline-development-tools -D downloaded-tools
           if ($LASTEXITCODE -ne 0) { throw 'Tool download failed' }
-          gh run download 37935184347 --repo gongfpp/config-reviewer-builds -n windows-offline-dependencies -D downloaded-deps
+          gh run download $env:DEPENDENCIES_RUN --repo gongfpp/config-reviewer-builds -n windows-offline-dependencies -D downloaded-deps
           if ($LASTEXITCODE -ne 0) { throw 'Dependency download failed' }
           python prepare-acceptance.py
           if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare isolated kit' }
@@ -67,7 +72,7 @@ jobs:
             if ($p.ExitCode -notin @(0,3010)) { throw "SDK cleanup failed: $($p.ExitCode)" }
           }
           if (Test-Path 'C:/Program Files (x86)/Windows Kits/10/Include/10.0.19041.0') { throw 'SDK 19041 files remain; cannot claim a clean SDK fixture' }
-      - name: Install tools, edit source, compile twice and test UI with all external traffic blocked
+      - name: Install tools, edit source, compile twice and test UI with development tool external traffic blocked
         shell: powershell
         run: |
           & 'C:/ReviewerKit/scripts/test-offline-development.ps1'
