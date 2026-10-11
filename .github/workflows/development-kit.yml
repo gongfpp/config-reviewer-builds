@@ -55,6 +55,18 @@ jobs:
           $p = Start-Process $cleanup -ArgumentList '-f' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Compiler/SDK fixture cleanup failed: $($p.ExitCode)" }
           if (Test-Path 'C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC') { throw 'Preinstalled compiler files remain' }
+          # The SDK can be registered independently of VS; remove its bundle as well.
+          $sdkProducts = @(Get-ItemProperty 'HKLM:/SOFTWARE/Microsoft/Windows/CurrentVersion/Uninstall/*','HKLM:/SOFTWARE/WOW6432Node/Microsoft/Windows/CurrentVersion/Uninstall/*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'Windows Software Development Kit.*19041' })
+          foreach ($sdkProduct in $sdkProducts) {
+            $command = $sdkProduct.UninstallString
+            if ($command -match '^"([^"]+)"') {
+              $p = Start-Process $matches[1] -ArgumentList @('/uninstall','/quiet','/norestart') -Wait -PassThru
+            } elseif ($command -match 'MsiExec' -and $command -match '(\{[A-Fa-f0-9-]+\})') {
+              $p = Start-Process msiexec.exe -ArgumentList @('/x',$matches[1],'/qn','/norestart') -Wait -PassThru
+            } else { throw 'Cannot identify the SDK bundle uninstall command' }
+            if ($p.ExitCode -notin @(0,3010)) { throw "SDK cleanup failed: $($p.ExitCode)" }
+          }
+          if (Test-Path 'C:/Program Files (x86)/Windows Kits/10/Include/10.0.19041.0') { throw 'SDK 19041 files remain; cannot claim a clean SDK fixture' }
       - name: Install tools, edit source, compile twice and test UI with all external traffic blocked
         shell: powershell
         run: |
