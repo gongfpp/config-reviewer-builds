@@ -48,3 +48,8 @@ jobs:
             C:/ReviewerKit/artifacts/ui-smoke
             C:/ReviewerKit/.offline/install-logs
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-development-kit-exe
+          path: C:/ReviewerKit/ready-to-run/config-reviewer.exe
+          if-no-files-found: error
