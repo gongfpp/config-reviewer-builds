@@ -18,7 +18,8 @@ jobs:
           gh run download 38164937632 -R gongfpp/config-reviewer-builds -n config-reviewer-windows-offline -D downloaded
           if ($LASTEXITCODE -ne 0) { throw 'Application download failed' }
           Expand-Archive (Get-ChildItem downloaded/*.zip).FullName C:/ReviewerRuntime
-          Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2124701' -UseBasicParsing -OutFile C:/ReviewerRuntime/WebView2.exe
+          curl.exe --fail --location --silent --show-error --retry 3 'https://go.microsoft.com/fwlink/?linkid=2124701' -o C:/ReviewerRuntime/WebView2.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime download failed' }
           if ((Get-FileHash C:/ReviewerRuntime/WebView2.exe).Hash -ne '2a6add76c37bfa872eb8c2b22d45b3216b8e2a1f193e0774006340ff62ac5fa0') { throw 'Runtime installer differs from prepared tool pack' }
       - name: Diagnose absent WebView2 and isolated application startup
         shell: powershell
