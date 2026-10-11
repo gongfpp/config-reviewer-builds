@@ -81,6 +81,12 @@ jobs:
             C:/ReviewerKit/.offline/install-logs
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compiled-exe-diagnostics
+          path: C:/ReviewerKit/src-tauri/target/x86_64-pc-windows-msvc/debug/config-reviewer.exe
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
         with:
           name: standalone-development-kit-exe
           path: C:/ReviewerKit/ready-to-run/config-reviewer.exe
