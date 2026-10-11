@@ -8,6 +8,10 @@ on:
       tools_run:
         description: Verified third-party tool preparation run ID
         required: true
+      clean_fixture:
+        description: Reset all preinstalled compiler and shared SDK caches on the disposable runner
+        type: boolean
+        default: false
 jobs:
   acceptance:
     runs-on: windows-2022
@@ -35,6 +39,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Dependency download failed' }
           python prepare-acceptance.py
           if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare isolated kit' }
+      - name: Reset shared compiler and SDK caches on the disposable runner
+        if: inputs.clean_fixture
+        shell: powershell
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Disposable hosted runner required' }
+          $cleanup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/InstallCleanup.exe'
+          if (-not (Test-Path $cleanup)) { throw 'Microsoft cleanup tool missing' }
+          $p = Start-Process $cleanup -ArgumentList '-f' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Compiler/SDK fixture cleanup failed: $($p.ExitCode)" }
+          if (Test-Path 'C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC') { throw 'Preinstalled compiler files remain' }
       - name: Install tools, edit source, compile twice and test UI with all external traffic blocked
         shell: powershell
         run: |
